@@ -1,2 +1,64 @@
+
+name: System Health Check
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: "0 * * * *" # Runs every hour
+  workflow_dispatch: # Allows you to run it manually for testing
+
 env:
+  # Upgrades the runner to Node.js 24 to fix deprecation warnings
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4 # Updated to latest stable version
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24' # Explicitly use the latest Node version
+
+      - name: Install Dependencies
+        # Only runs if a package.json exists to prevent errors
+        run: |
+          if [ -f package.json ]; then
+            npm ci
+          else
+            echo "No package.json found, skipping npm install."
+          fi
+
+      - name: Run Health Check
+        id: check
+        # This section adds debug info to see why it fails (Exit Code 1)
+        run: |
+          echo "Starting health check..."
+          echo "Current directory contents:"
+          ls -R
+          
+          # Replace 'health_check.sh' with your actual health check command/file
+          if [ -f health_check.sh ]; then
+            bash health_check.sh
+          elif [ -f index.js ]; then
+            node index.js
+          else
+            echo "::error::No health check script (health_check.sh or index.js) found!"
+            exit 1
+          fi
+
+      - name: Upload Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-check-failure-logs
+          path: ./*.log # Adjust if your logs are stored elsewhere
